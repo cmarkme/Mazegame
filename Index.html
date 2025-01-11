@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Top-Down Maze Example</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden; /* Hide scrollbars */
+      background: #333;
+    }
+    canvas {
+      display: block;
+      background: #000;
+      margin: 0 auto;
+      border: 1px solid #444;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="640" height="480"></canvas>
+
+<script>
+/**************************************************************
+ * 1. Define the Maze Layout
+ *    0 = Floor, 1 = Wall
+ **************************************************************/
+const maze = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,0,1,1,1,1,0,0,1],
+  [1,0,1,0,0,0,0,0,0,1,0,0,1],
+  [1,0,1,1,1,1,1,1,0,1,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,1,1],
+  [1,1,1,1,1,1,0,1,0,0,0,0,1],
+  [1,0,0,0,0,1,0,1,1,1,1,0,1],
+  [1,0,1,1,0,1,0,0,0,0,1,0,1],
+  [1,0,1,0,0,0,0,1,0,0,1,0,1],
+  [1,0,0,0,1,0,1,1,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+// Dimensions of each tile
+const TILE_SIZE = 32;
+
+// Maze dimensions in tiles
+const ROWS = maze.length;
+const COLS = maze[0].length;
+
+// Canvas & context
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Canvas center in pixels
+const canvasCenterX = canvas.width / 2;
+const canvasCenterY = canvas.height / 2;
+
+/**************************************************************
+ * 2. Define the Player
+ **************************************************************/
+const player = {
+  x: TILE_SIZE * 2, // World coordinates (start near top-left)
+  y: TILE_SIZE * 2,
+  speed: 3 // Movement speed in pixels per frame
+};
+
+// Track which keys are pressed
+let keys = {};
+
+/**************************************************************
+ * 3. Handle Player Movement & Collision
+ **************************************************************/
+function updatePlayer() {
+  let moveX = 0;
+  let moveY = 0;
+
+  if (keys.ArrowUp)    moveY = -player.speed;
+  if (keys.ArrowDown)  moveY =  player.speed;
+  if (keys.ArrowLeft)  moveX = -player.speed;
+  if (keys.ArrowRight) moveX =  player.speed;
+
+  // Calculate new potential position
+  const newX = player.x + moveX;
+  const newY = player.y + moveY;
+
+  // Check collision: which tile indices would this position be in?
+  const tileCol = Math.floor(newX / TILE_SIZE);
+  const tileRow = Math.floor(newY / TILE_SIZE);
+
+  // If not a wall, update player position
+  if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
+    player.x = newX;
+    player.y = newY;
+  }
+}
+
+/**************************************************************
+ * 4. Draw the Maze (offset based on player's position)
+ **************************************************************/
+function drawMaze() {
+  // Clear the canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Calculate offset so that the player is in the center
+  const offsetX = canvasCenterX - player.x;
+  const offsetY = canvasCenterY - player.y;
+
+  // Draw each tile in the maze
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      // Determine the pixel position of this tile in world coordinates
+      const tileX = col * TILE_SIZE;
+      const tileY = row * TILE_SIZE;
+
+      // Shift them based on offset
+      const screenX = tileX + offsetX;
+      const screenY = tileY + offsetY;
+
+      // If it's a wall, draw it
+      if (maze[row][col] === 1) {
+        ctx.fillStyle = "darkgray";
+        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+      } else {
+        // Optional: draw floor
+        ctx.fillStyle = "black";
+        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+      }
+    }
+  }
+
+  // Draw the player (always at center visually)
+  // But for clarity, we’ll just draw them with offset, too:
+  const playerScreenX = player.x + offsetX;
+  const playerScreenY = player.y + offsetY;
+
+  ctx.fillStyle = "lime";
+  ctx.beginPath();
+  ctx.arc(playerScreenX, playerScreenY, 8, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**************************************************************
+ * 5. Main Game Loop
+ **************************************************************/
+function gameLoop() {
+  updatePlayer();
+  drawMaze();
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+
+/**************************************************************
+ * 6. Keyboard Listeners
+ **************************************************************/
+window.addEventListener("keydown", (e) => {
+  keys[e.key] = true;
+});
+
+window.addEventListener("keyup", (e) => {
+  keys[e.key] = false;
+});
+</script>
+</body>
+</html>

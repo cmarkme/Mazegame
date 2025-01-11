@@ -2,157 +2,306 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Top-Down Maze Example</title>
+  <title>Mobile-Friendly Maze Game with Enemy</title>
   <style>
     body {
       margin: 0;
-      overflow: hidden; /* Hide scrollbars */
       background: #333;
+      font-family: sans-serif;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     canvas {
-      display: block;
       background: #000;
-      margin: 0 auto;
       border: 1px solid #444;
+      display: block;
+      margin: 10px auto;
+    }
+    /* Container for arrow buttons */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .controls button {
+      width: 50px;
+      height: 50px;
+      font-size: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #666;
+      color: #fff;
+      cursor: pointer;
+      user-select: none; /* Prevent double-tap zoom on mobile */
     }
   </style>
 </head>
 <body>
+
 <canvas id="gameCanvas" width="640" height="480"></canvas>
 
+<!-- On-screen arrow controls (mobile-friendly) -->
+<div class="controls">
+  <button id="btnUp">↑</button>
+  <button id="btnLeft">←</button>
+  <button id="btnRight">→</button>
+  <button id="btnDown">↓</button>
+</div>
+
 <script>
-/**************************************************************
- * 1. Define the Maze Layout
- *    0 = Floor, 1 = Wall
- **************************************************************/
+//**************************************************************
+// 1. Define a Larger Maze Layout (25x25 for example)
+//    0 = Floor, 1 = Wall
+//    Use any arrangement or generate it procedurally.
+//**************************************************************
 const maze = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,1,0,1,0,1,1,1,1,0,0,1],
-  [1,0,1,0,0,0,0,0,0,1,0,0,1],
-  [1,0,1,1,1,1,1,1,0,1,0,0,1],
-  [1,0,0,0,0,0,0,1,0,0,0,1,1],
-  [1,1,1,1,1,1,0,1,0,0,0,0,1],
-  [1,0,0,0,0,1,0,1,1,1,1,0,1],
-  [1,0,1,1,0,1,0,0,0,0,1,0,1],
-  [1,0,1,0,0,0,0,1,0,0,1,0,1],
-  [1,0,0,0,1,0,1,1,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1]
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1],
+  [1,0,1,0,1,0,1,0,0,0,0,0,1,0,0,1,0,0,0,1,0,1,0,0,1],
+  [1,0,1,0,1,0,0,0,1,1,1,0,1,0,1,1,1,1,0,1,1,1,1,0,1],
+  [1,0,0,0,1,1,1,0,1,0,1,0,1,0,0,0,0,1,0,1,0,0,1,0,1],
+  [1,0,1,1,1,1,1,0,0,0,1,0,1,1,1,1,0,1,1,1,0,0,0,0,1],
+  [1,0,1,0,0,0,0,0,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,0,1],
+  [1,0,1,1,1,1,0,1,1,0,1,0,1,0,0,1,0,1,0,0,0,1,0,0,1],
+  [1,0,1,0,0,1,0,0,0,0,1,0,1,1,0,1,1,1,1,1,0,1,0,0,1],
+  [1,0,1,1,0,0,1,1,1,0,1,0,0,0,0,1,0,0,0,1,1,1,1,0,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,1,0,1,0,0,0,0,0,0,1],
+  [1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,0,1,0,1],
+  [1,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,1,0,0,1,0,1],
+  [1,0,1,1,1,1,1,0,1,0,1,0,0,1,1,1,0,1,0,1,1,0,0,0,1],
+  [1,0,0,0,0,0,1,0,1,0,1,1,0,1,0,0,0,1,0,0,1,0,1,1,1],
+  [1,0,1,1,1,0,1,1,1,0,0,0,1,1,1,1,0,1,1,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,1,0,1],
+  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,0,0,1],
+  [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1],
+  [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,0,1,0,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,1,0,1],
+  [1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,0,1,1,0,1,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
-// Dimensions of each tile
+// Dimensions per tile
 const TILE_SIZE = 32;
 
-// Maze dimensions in tiles
+// Maze rows and columns
 const ROWS = maze.length;
 const COLS = maze[0].length;
 
-// Canvas & context
+// Canvas setup
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Canvas center in pixels
+// Player object
+const player = {
+  x: TILE_SIZE * 2,   // Start near top-left in world coords
+  y: TILE_SIZE * 2,
+  speed: 3
+};
+
+// Enemy object
+const enemy = {
+  x: TILE_SIZE * (COLS - 3),  // Start near bottom-right
+  y: TILE_SIZE * (ROWS - 3),
+  speed: 2
+};
+
+// Keyboard tracking
+let keys = {};
+
+// We’ll keep the player centered, so we need canvas center
 const canvasCenterX = canvas.width / 2;
 const canvasCenterY = canvas.height / 2;
 
-/**************************************************************
- * 2. Define the Player
- **************************************************************/
-const player = {
-  x: TILE_SIZE * 2, // World coordinates (start near top-left)
-  y: TILE_SIZE * 2,
-  speed: 3 // Movement speed in pixels per frame
-};
+//**************************************************************
+// 2. BFS Pathfinding Helper
+//    Returns a path (array of {row, col}) from (sr, sc) to (tr, tc).
+//    If no path, returns null.
+//**************************************************************
+function bfsPath(sr, sc, tr, tc, maze) {
+  // If same tile or invalid, quick exit
+  if (sr === tr && sc === tc) return [{row: sr, col: sc}];
+  if (maze[tr] === undefined || maze[tr][tc] === undefined) return null;
+  if (maze[tr][tc] === 1) return null; // Can't path to a wall
 
-// Track which keys are pressed
-let keys = {};
+  const visited = new Set();
+  const queue = [];
+  // Each queue entry: { row, col, pathSoFar }
+  queue.push({ row: sr, col: sc, path: [{ row: sr, col: sc }] });
+  visited.add(`${sr},${sc}`);
 
-/**************************************************************
- * 3. Handle Player Movement & Collision
- **************************************************************/
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const { row, col, path } = current;
+
+    // Explore neighbors (up, down, left, right)
+    const neighbors = [
+      { r: row - 1, c: col },
+      { r: row + 1, c: col },
+      { r: row, c: col - 1 },
+      { r: row, c: col + 1 },
+    ];
+
+    for (let n of neighbors) {
+      // Check boundaries and walls
+      if (
+        n.r >= 0 && n.r < ROWS &&
+        n.c >= 0 && n.c < COLS &&
+        maze[n.r][n.c] === 0
+      ) {
+        if (!visited.has(`${n.r},${n.c}`)) {
+          const newPath = [...path, { row: n.r, col: n.c }];
+          // If we reached target, return path
+          if (n.r === tr && n.c === tc) {
+            return newPath;
+          }
+          // Otherwise keep searching
+          queue.push({ row: n.r, col: n.c, path: newPath });
+          visited.add(`${n.r},${n.c}`);
+        }
+      }
+    }
+  }
+  // No path found
+  return null;
+}
+
+//**************************************************************
+// 3. Update Player
+//    Moves based on keyboard or on-screen button presses
+//**************************************************************
 function updatePlayer() {
   let moveX = 0;
   let moveY = 0;
 
+  // Keyboard arrow keys
   if (keys.ArrowUp)    moveY = -player.speed;
   if (keys.ArrowDown)  moveY =  player.speed;
   if (keys.ArrowLeft)  moveX = -player.speed;
   if (keys.ArrowRight) moveX =  player.speed;
 
-  // Calculate new potential position
+  // Calculate new position
   const newX = player.x + moveX;
   const newY = player.y + moveY;
 
-  // Check collision: which tile indices would this position be in?
+  // Check collision
   const tileCol = Math.floor(newX / TILE_SIZE);
   const tileRow = Math.floor(newY / TILE_SIZE);
 
-  // If not a wall, update player position
   if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
     player.x = newX;
     player.y = newY;
   }
 }
 
-/**************************************************************
- * 4. Draw the Maze (offset based on player's position)
- **************************************************************/
+//**************************************************************
+// 4. Update Enemy
+//    Use BFS to find path to player's tile, then move one step
+//**************************************************************
+function updateEnemy() {
+  // Current enemy tile
+  const enemyCol = Math.floor(enemy.x / TILE_SIZE);
+  const enemyRow = Math.floor(enemy.y / TILE_SIZE);
+
+  // Player tile
+  const playerCol = Math.floor(player.x / TILE_SIZE);
+  const playerRow = Math.floor(player.y / TILE_SIZE);
+
+  // Run BFS to find path
+  const path = bfsPath(enemyRow, enemyCol, playerRow, playerCol, maze);
+  if (!path || path.length < 2) {
+    // No path found or enemy is already at the player tile
+    return;
+  }
+
+  // Path is an array of {row, col}. The first element is enemy's current tile.
+  // The second element is the next tile to step towards the player.
+  const nextStep = path[1];
+  
+  // Convert tile back to world coordinates
+  const targetX = nextStep.col * TILE_SIZE;
+  const targetY = nextStep.row * TILE_SIZE;
+
+  // Move enemy in small steps towards the next tile center.
+  // We can do a simple "if difference > speed, move by speed" approach:
+  const dx = targetX - enemy.x;
+  const dy = targetY - enemy.y;
+  
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist > enemy.speed) {
+    // Move fractionally in direction
+    enemy.x += (dx / dist) * enemy.speed;
+    enemy.y += (dy / dist) * enemy.speed;
+  } else {
+    // We are close enough—snap to tile center
+    enemy.x = targetX;
+    enemy.y = targetY;
+  }
+}
+
+//**************************************************************
+// 5. Drawing Functions
+//**************************************************************
 function drawMaze() {
-  // Clear the canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Calculate offset so that the player is in the center
+  // Calculate offset so the player is visually in center
   const offsetX = canvasCenterX - player.x;
   const offsetY = canvasCenterY - player.y;
 
-  // Draw each tile in the maze
+  // Draw maze tiles
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      // Determine the pixel position of this tile in world coordinates
       const tileX = col * TILE_SIZE;
       const tileY = row * TILE_SIZE;
-
-      // Shift them based on offset
       const screenX = tileX + offsetX;
       const screenY = tileY + offsetY;
 
-      // If it's a wall, draw it
       if (maze[row][col] === 1) {
         ctx.fillStyle = "darkgray";
-        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
       } else {
-        // Optional: draw floor
         ctx.fillStyle = "black";
-        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
       }
+      ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
     }
   }
 
-  // Draw the player (always at center visually)
-  // But for clarity, we’ll just draw them with offset, too:
+  // Draw player
   const playerScreenX = player.x + offsetX;
   const playerScreenY = player.y + offsetY;
-
   ctx.fillStyle = "lime";
   ctx.beginPath();
-  ctx.arc(playerScreenX, playerScreenY, 8, 0, Math.PI * 2);
+  ctx.arc(playerScreenX, playerScreenY, 8, 0, Math.PI*2);
+  ctx.fill();
+
+  // Draw enemy
+  const enemyScreenX = enemy.x + offsetX;
+  const enemyScreenY = enemy.y + offsetY;
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(enemyScreenX, enemyScreenY, 8, 0, Math.PI*2);
   ctx.fill();
 }
 
-/**************************************************************
- * 5. Main Game Loop
- **************************************************************/
+//**************************************************************
+// 6. Main Game Loop
+//**************************************************************
 function gameLoop() {
   updatePlayer();
+  updateEnemy();
   drawMaze();
   requestAnimationFrame(gameLoop);
 }
+
 requestAnimationFrame(gameLoop);
 
-/**************************************************************
- * 6. Keyboard Listeners
- **************************************************************/
+//**************************************************************
+// 7. Keyboard and On-Screen Button Listeners
+//**************************************************************
 window.addEventListener("keydown", (e) => {
   keys[e.key] = true;
 });
@@ -160,6 +309,55 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => {
   keys[e.key] = false;
 });
+
+// On-screen arrow buttons
+document.getElementById("btnUp").addEventListener("mousedown", () => {
+  keys.ArrowUp = true;
+});
+document.getElementById("btnUp").addEventListener("mouseup", () => {
+  keys.ArrowUp = false;
+});
+document.getElementById("btnDown").addEventListener("mousedown", () => {
+  keys.ArrowDown = true;
+});
+document.getElementById("btnDown").addEventListener("mouseup", () => {
+  keys.ArrowDown = false;
+});
+document.getElementById("btnLeft").addEventListener("mousedown", () => {
+  keys.ArrowLeft = true;
+});
+document.getElementById("btnLeft").addEventListener("mouseup", () => {
+  keys.ArrowLeft = false;
+});
+document.getElementById("btnRight").addEventListener("mousedown", () => {
+  keys.ArrowRight = true;
+});
+document.getElementById("btnRight").addEventListener("mouseup", () => {
+  keys.ArrowRight = false;
+});
+
+/*
+  For touchscreen devices that don't trigger mousedown/mouseup:
+  we can also listen for "touchstart" and "touchend" similarly:
+*/
+["btnUp","btnDown","btnLeft","btnRight"].forEach(id => {
+  const btn = document.getElementById(id);
+  btn.addEventListener("touchstart", (e) => {
+    e.preventDefault(); // Prevent pinch-zoom
+    if (id === "btnUp") keys.ArrowUp = true;
+    if (id === "btnDown") keys.ArrowDown = true;
+    if (id === "btnLeft") keys.ArrowLeft = true;
+    if (id === "btnRight") keys.ArrowRight = true;
+  });
+  btn.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    if (id === "btnUp") keys.ArrowUp = false;
+    if (id === "btnDown") keys.ArrowDown = false;
+    if (id === "btnLeft") keys.ArrowLeft = false;
+    if (id === "btnRight") keys.ArrowRight = false;
+  });
+});
 </script>
+
 </body>
 </html>

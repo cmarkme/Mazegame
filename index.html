@@ -2,44 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Swipe Maze with Tap-to-Fire</title>
+  <title>Swipe Maze with Tap-to-Fire (Fixed Laser Direction)</title>
   <style>
     body {
-      margin:0; 
-      background:#333; 
-      display:flex; 
-      flex-direction:column; 
-      align-items:center;
-      user-select:none; /* Prevent text highlight on touch/drag */
-      touch-action:none; /* Prevent default panning on mobile */
+      margin: 0;
+      background: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;       /* Prevent text selection on drag */
+      touch-action: none;      /* Prevent default browser gestures on mobile */
     }
     canvas {
-      background:#000; 
-      border:1px solid #444; 
-      display:block; 
-      margin:10px auto;
+      background: #000;
+      border: 1px solid #444;
+      display: block;
+      margin: 10px auto;
     }
     .controls {
-      display:flex; 
-      gap:0.5rem; 
-      margin-bottom:1rem;
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
     }
     .controls button {
-      width:50px; 
-      height:50px; 
-      font-size:1.5rem; 
-      border-radius:8px; 
-      border:1px solid #444;
-      background:#666; 
-      color:#fff; 
-      cursor:pointer;
+      width: 50px;
+      height: 50px;
+      font-size: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #666;
+      color: #fff;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
 <canvas id="gameCanvas" width="640" height="480"></canvas>
-<!-- We still keep the arrow buttons for desktop users, or those who prefer them -->
+<!-- On-screen controls (optional for desktop) -->
 <div class="controls">
   <button id="btnUp">↑</button>
   <button id="btnLeft">←</button>
@@ -49,7 +49,7 @@
 
 <script>
 //************************************************************
-// 1. Random Maze (50x50), BFS, Enemy, etc. (Same as before)
+// 1. Maze Setup (50x50 with BFS pathfinding, enemy, etc.)
 //************************************************************
 const ROWS = 50;
 const COLS = 50;
@@ -57,11 +57,11 @@ const WALL_CHANCE = 0.25;
 
 function createRandomMaze(rows, cols) {
   const newMaze = [];
-  for (let r=0; r<rows; r++) {
+  for (let r = 0; r < rows; r++) {
     newMaze[r] = [];
-    for (let c=0; c<cols; c++) {
+    for (let c = 0; c < cols; c++) {
       // Outer boundary = walls
-      if (r === 0 || r === rows-1 || c === 0 || c === cols-1) {
+      if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) {
         newMaze[r][c] = 1;
       } else {
         newMaze[r][c] = Math.random() < WALL_CHANCE ? 1 : 0;
@@ -73,53 +73,55 @@ function createRandomMaze(rows, cols) {
 
 const maze = createRandomMaze(ROWS, COLS);
 // Ensure spawn areas are open
-maze[1][1] = 0;
-maze[ROWS-2][COLS-2] = 0;
+maze[1][1] = 0;                       // Player spawn
+maze[ROWS - 2][COLS - 2] = 0;         // Enemy spawn
 
 const TILE_SIZE = 32;
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Player always drawn in center, but we track world coords
 const player = {
   x: TILE_SIZE * 1,
   y: TILE_SIZE * 1,
   speed: 3
 };
 
+// Enemy
 const enemy = {
   x: TILE_SIZE * (COLS - 2),
   y: TILE_SIZE * (ROWS - 2),
   speed: 2
 };
 
-let keys = {};
-const canvasCenterX = canvas.width / 2;
-const canvasCenterY = canvas.height / 2;
-
-// We'll store lasers in an array
+// Keep track of lasers
 // Each laser: { x, y, dx, dy, speed }
 const lasers = [];
 const MAX_LASERS = 5;
 
+let keys = {};
+const canvasCenterX = canvas.width / 2;
+const canvasCenterY = canvas.height / 2;
+
 //************************************************************
-// BFS Pathfinding (same as before)
+// 2. BFS for Enemy Pathfinding
 //************************************************************
 function bfsPath(sr, sc, tr, tc, grid) {
-  if (sr === tr && sc === tc) return [{row: sr, col: sc}];
+  if (sr === tr && sc === tc) return [{ row: sr, col: sc }];
   if (!grid[tr] || grid[tr][tc] !== 0) return null;
 
   const visited = new Set();
   const queue = [];
-  queue.push({ row: sr, col: sc, path: [{row: sr, col: sc}] });
+  queue.push({ row: sr, col: sc, path: [{ row: sr, col: sc }] });
   visited.add(`${sr},${sc}`);
 
   while (queue.length > 0) {
     const { row, col, path } = queue.shift();
     const neighbors = [
-      { r: row-1, c: col },
-      { r: row+1, c: col },
-      { r: row, c: col-1 },
-      { r: row, c: col+1 },
+      { r: row - 1, c: col },
+      { r: row + 1, c: col },
+      { r: row, c: col - 1 },
+      { r: row, c: col + 1 },
     ];
     for (let n of neighbors) {
       if (
@@ -141,24 +143,24 @@ function bfsPath(sr, sc, tr, tc, grid) {
 }
 
 //************************************************************
-// 2. Update Player & Enemy
-//    (Keyboard movement for Player, BFS for Enemy)
+// 3. Update Entities (Player, Enemy, Lasers)
 //************************************************************
 function updatePlayer() {
-  // Arrow keys for desktop
-  let moveX = 0, moveY = 0;
-  if (keys.ArrowUp)    moveY = -player.speed;
-  if (keys.ArrowDown)  moveY =  player.speed;
-  if (keys.ArrowLeft)  moveX = -player.speed;
-  if (keys.ArrowRight) moveX =  player.speed;
+  let moveX = 0;
+  let moveY = 0;
+  // Keyboard-based movement
+  if (keys.ArrowUp) moveY = -player.speed;
+  if (keys.ArrowDown) moveY = player.speed;
+  if (keys.ArrowLeft) moveX = -player.speed;
+  if (keys.ArrowRight) moveX = player.speed;
 
-  // Move player
+  // Potential new position
   const newX = player.x + moveX;
   const newY = player.y + moveY;
+  // Simple collision check
   const tileCol = Math.floor(newX / TILE_SIZE);
   const tileRow = Math.floor(newY / TILE_SIZE);
 
-  // Collision
   if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
     player.x = newX;
     player.y = newY;
@@ -177,9 +179,10 @@ function updateEnemy() {
   const targetX = nextStep.col * TILE_SIZE;
   const targetY = nextStep.row * TILE_SIZE;
 
+  // Move enemy a bit closer to next tile center
   const dx = targetX - enemy.x;
   const dy = targetY - enemy.y;
-  const dist = Math.sqrt(dx*dx + dy*dy);
+  const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist > enemy.speed) {
     enemy.x += (dx / dist) * enemy.speed;
     enemy.y += (dy / dist) * enemy.speed;
@@ -189,44 +192,39 @@ function updateEnemy() {
   }
 }
 
-//************************************************************
-// 3. Lasers (Tap to Fire) - Update
-//************************************************************
 function updateLasers() {
-  // Move each laser
   for (let i = lasers.length - 1; i >= 0; i--) {
     const laser = lasers[i];
     laser.x += laser.dx * laser.speed;
     laser.y += laser.dy * laser.speed;
 
-    // Check if out of bounds or hitting a wall
-    // Convert laser coords to tile
+    // Check if out of bounds or hits a wall
     const tileCol = Math.floor(laser.x / TILE_SIZE);
     const tileRow = Math.floor(laser.y / TILE_SIZE);
-
-    // If out of map bounds or into a wall => remove
     if (
       tileRow < 0 || tileRow >= ROWS ||
       tileCol < 0 || tileCol >= COLS ||
       (maze[tileRow] && maze[tileRow][tileCol] === 1)
     ) {
+      // Remove laser
       lasers.splice(i, 1);
     }
   }
 }
 
 //************************************************************
-// 4. Draw Maze, Player, Enemy, Lasers
+// 4. Drawing
 //************************************************************
 function drawMaze() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Camera offset => player is drawn at center
   const offsetX = canvasCenterX - player.x;
   const offsetY = canvasCenterY - player.y;
 
   // Draw Maze
-  for (let row=0; row<ROWS; row++) {
-    for (let col=0; col<COLS; col++) {
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
       const tileX = col * TILE_SIZE;
       const tileY = row * TILE_SIZE;
       const screenX = tileX + offsetX;
@@ -245,7 +243,7 @@ function drawMaze() {
   const pScreenY = player.y + offsetY;
   ctx.fillStyle = "lime";
   ctx.beginPath();
-  ctx.arc(pScreenX, pScreenY, 8, 0, Math.PI*2);
+  ctx.arc(pScreenX, pScreenY, 8, 0, Math.PI * 2);
   ctx.fill();
 
   // Draw Enemy
@@ -253,35 +251,35 @@ function drawMaze() {
   const eScreenY = enemy.y + offsetY;
   ctx.fillStyle = "red";
   ctx.beginPath();
-  ctx.arc(eScreenX, eScreenY, 8, 0, Math.PI*2);
+  ctx.arc(eScreenX, eScreenY, 8, 0, Math.PI * 2);
   ctx.fill();
 
   // Draw Lasers
   ctx.fillStyle = "yellow";
-  for (let laser of lasers) {
+  lasers.forEach(laser => {
     const lx = laser.x + offsetX;
     const ly = laser.y + offsetY;
     ctx.beginPath();
-    // A small circle or rectangle – up to you
-    ctx.arc(lx, ly, 4, 0, Math.PI*2);
+    // small circle for the laser
+    ctx.arc(lx, ly, 4, 0, Math.PI * 2);
     ctx.fill();
-  }
+  });
 }
 
 //************************************************************
 // 5. Main Loop
 //************************************************************
 function gameLoop() {
-  updatePlayer();   // Keyboard
-  updateEnemy();    
-  updateLasers();   // Move lasers
+  updatePlayer();
+  updateEnemy();
+  updateLasers();
   drawMaze();
   requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
 
 //************************************************************
-// 6. Controls - Keyboard and On-Screen Buttons
+// 6. Keyboard + On-Screen Button Events
 //************************************************************
 window.addEventListener("keydown", (e) => {
   keys[e.key] = true;
@@ -304,6 +302,7 @@ window.addEventListener("keyup", (e) => {
     if (id === "btnLeft") keys.ArrowLeft = false;
     if (id === "btnRight") keys.ArrowRight = false;
   });
+  // Touch
   btn.addEventListener("touchstart", (e) => {
     e.preventDefault();
     if (id === "btnUp") keys.ArrowUp = true;
@@ -321,13 +320,13 @@ window.addEventListener("keyup", (e) => {
 });
 
 //************************************************************
-// 7. Swipe-to-Move + Tap-to-Fire
+// 7. Swipe-to-Move & Tap-to-Fire with Fixed Laser Direction
 //************************************************************
 
-// We'll track where the finger started, and how far it moved
+// Track finger start
 let touchStartX = 0;
 let touchStartY = 0;
-let totalMove = 0; // track distance traveled to distinguish swipe vs tap
+let totalMove = 0; // Dist traveled - helps us detect "tap" vs "swipe"
 
 canvas.addEventListener("touchstart", (e) => {
   e.preventDefault();
@@ -339,19 +338,17 @@ canvas.addEventListener("touchstart", (e) => {
 
 canvas.addEventListener("touchmove", (e) => {
   e.preventDefault();
-  // If there's only one touch, treat it as a drag to move the maze
   if (e.touches.length === 1) {
     const touch = e.touches[0];
     const dx = touch.clientX - touchStartX;
     const dy = touch.clientY - touchStartY;
     totalMove += Math.abs(dx) + Math.abs(dy);
 
-    // Move the player in the opposite direction of the drag
-    // This effectively "swipes" the map
+    // Move player in opposite direction of drag
     const newX = player.x - dx;
     const newY = player.y - dy;
 
-    // Check collision in a simple way
+    // Basic collision check
     const tileCol = Math.floor(newX / TILE_SIZE);
     const tileRow = Math.floor(newY / TILE_SIZE);
     if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
@@ -359,7 +356,7 @@ canvas.addEventListener("touchmove", (e) => {
       player.y = newY;
     }
 
-    // Reset touchStart so movement continues seamlessly
+    // Reset the start so we can keep swiping
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
   }
@@ -367,36 +364,30 @@ canvas.addEventListener("touchmove", (e) => {
 
 canvas.addEventListener("touchend", (e) => {
   e.preventDefault();
-
-  // If totalMove is small => it's a TAP
-  // We'll interpret a quick tap as "fire a laser"
   if (totalMove < 10) {
-    // Where did the touch end?
-    // For simplicity, we can use changedTouches[0]
+    // => Tap (not swipe)
     const touch = e.changedTouches[0];
     const tapX = touch.clientX;
     const tapY = touch.clientY;
 
-    // Convert screen coords to world coords
-    const offsetX = canvasCenterX - player.x;
-    const offsetY = canvasCenterY - player.y;
-    const worldX = tapX - offsetX;
-    const worldY = tapY - offsetY;
+    // --- FIXED LASER DIRECTION (Option A) ---
+    // Hero is visually at (canvasCenterX, canvasCenterY).
+    // Direction in screen space = (tapX - centerX, tapY - centerY).
+    // We'll still spawn the laser at the player's *world* coords, 
+    // but move it according to that direction.
+    const dxScreen = tapX - canvasCenterX;
+    const dyScreen = tapY - canvasCenterY;
+    const length = Math.sqrt(dxScreen*dxScreen + dyScreen*dyScreen);
 
-    // Direction from player to tap
-    const dirX = worldX - player.x;
-    const dirY = worldY - player.y;
-    const length = Math.sqrt(dirX*dirX + dirY*dirY);
     if (length > 0 && lasers.length < MAX_LASERS) {
-      // Normalize
-      const ndx = dirX / length;
-      const ndy = dirY / length;
+      const ndx = dxScreen / length;
+      const ndy = dyScreen / length;
       lasers.push({
-        x: player.x, 
+        x: player.x,    // spawn at player's world coords
         y: player.y,
-        dx: ndx, 
+        dx: ndx,        // direction in screen space
         dy: ndy,
-        speed: 10 // Laser speed
+        speed: 10
       });
     }
   }

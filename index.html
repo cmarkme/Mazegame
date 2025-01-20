@@ -2,20 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Bigger Maze - 50x50 Example</title>
+  <title>Swipe Maze with Tap-to-Fire</title>
   <style>
-    body { margin:0; background:#333; display:flex; flex-direction:column; align-items:center; }
-    canvas { background:#000; border:1px solid #444; display:block; margin:10px auto; }
-    .controls { display:flex; gap:0.5rem; margin-bottom:1rem; }
+    body {
+      margin:0; 
+      background:#333; 
+      display:flex; 
+      flex-direction:column; 
+      align-items:center;
+      user-select:none; /* Prevent text highlight on touch/drag */
+      touch-action:none; /* Prevent default panning on mobile */
+    }
+    canvas {
+      background:#000; 
+      border:1px solid #444; 
+      display:block; 
+      margin:10px auto;
+    }
+    .controls {
+      display:flex; 
+      gap:0.5rem; 
+      margin-bottom:1rem;
+    }
     .controls button {
-      width:50px; height:50px; font-size:1.5rem; border-radius:8px; border:1px solid #444;
-      background:#666; color:#fff; cursor:pointer;
+      width:50px; 
+      height:50px; 
+      font-size:1.5rem; 
+      border-radius:8px; 
+      border:1px solid #444;
+      background:#666; 
+      color:#fff; 
+      cursor:pointer;
     }
   </style>
 </head>
 <body>
 
 <canvas id="gameCanvas" width="640" height="480"></canvas>
+<!-- We still keep the arrow buttons for desktop users, or those who prefer them -->
 <div class="controls">
   <button id="btnUp">↑</button>
   <button id="btnLeft">←</button>
@@ -25,13 +49,10 @@
 
 <script>
 //************************************************************
-// 1. Generate a 50x50 random maze (0=floor,1=wall).
-//    Could scale to 100x100 for 4x the dimension of the 25x25.
+// 1. Random Maze (50x50), BFS, Enemy, etc. (Same as before)
 //************************************************************
 const ROWS = 50;
 const COLS = 50;
-
-// Probability that a cell is a wall
 const WALL_CHANCE = 0.25;
 
 function createRandomMaze(rows, cols) {
@@ -39,11 +60,10 @@ function createRandomMaze(rows, cols) {
   for (let r=0; r<rows; r++) {
     newMaze[r] = [];
     for (let c=0; c<cols; c++) {
-      // Make the outer boundary walls
+      // Outer boundary = walls
       if (r === 0 || r === rows-1 || c === 0 || c === cols-1) {
         newMaze[r][c] = 1;
       } else {
-        // Random interior
         newMaze[r][c] = Math.random() < WALL_CHANCE ? 1 : 0;
       }
     }
@@ -51,28 +71,21 @@ function createRandomMaze(rows, cols) {
   return newMaze;
 }
 
-// Create the bigger maze
 const maze = createRandomMaze(ROWS, COLS);
-
-// Ensure top-left area is open so the player can spawn
-maze[1][1] = 0; // floor
-// Ensure bottom-right area is open so the enemy can spawn
+// Ensure spawn areas are open
+maze[1][1] = 0;
 maze[ROWS-2][COLS-2] = 0;
 
-// Tile size (still 32px)
 const TILE_SIZE = 32;
-
-// Canvas
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Player
 const player = {
   x: TILE_SIZE * 1,
   y: TILE_SIZE * 1,
   speed: 3
 };
-// Enemy
+
 const enemy = {
   x: TILE_SIZE * (COLS - 2),
   y: TILE_SIZE * (ROWS - 2),
@@ -83,8 +96,13 @@ let keys = {};
 const canvasCenterX = canvas.width / 2;
 const canvasCenterY = canvas.height / 2;
 
+// We'll store lasers in an array
+// Each laser: { x, y, dx, dy, speed }
+const lasers = [];
+const MAX_LASERS = 5;
+
 //************************************************************
-// 2. BFS Pathfinding
+// BFS Pathfinding (same as before)
 //************************************************************
 function bfsPath(sr, sc, tr, tc, grid) {
   if (sr === tr && sc === tc) return [{row: sr, col: sc}];
@@ -123,19 +141,24 @@ function bfsPath(sr, sc, tr, tc, grid) {
 }
 
 //************************************************************
-// 3. Update Player & Enemy
+// 2. Update Player & Enemy
+//    (Keyboard movement for Player, BFS for Enemy)
 //************************************************************
 function updatePlayer() {
+  // Arrow keys for desktop
   let moveX = 0, moveY = 0;
-  if (keys.ArrowUp) moveY = -player.speed;
-  if (keys.ArrowDown) moveY =  player.speed;
-  if (keys.ArrowLeft) moveX = -player.speed;
+  if (keys.ArrowUp)    moveY = -player.speed;
+  if (keys.ArrowDown)  moveY =  player.speed;
+  if (keys.ArrowLeft)  moveX = -player.speed;
   if (keys.ArrowRight) moveX =  player.speed;
 
+  // Move player
   const newX = player.x + moveX;
   const newY = player.y + moveY;
   const tileCol = Math.floor(newX / TILE_SIZE);
   const tileRow = Math.floor(newY / TILE_SIZE);
+
+  // Collision
   if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
     player.x = newX;
     player.y = newY;
@@ -167,7 +190,33 @@ function updateEnemy() {
 }
 
 //************************************************************
-// 4. Draw Maze
+// 3. Lasers (Tap to Fire) - Update
+//************************************************************
+function updateLasers() {
+  // Move each laser
+  for (let i = lasers.length - 1; i >= 0; i--) {
+    const laser = lasers[i];
+    laser.x += laser.dx * laser.speed;
+    laser.y += laser.dy * laser.speed;
+
+    // Check if out of bounds or hitting a wall
+    // Convert laser coords to tile
+    const tileCol = Math.floor(laser.x / TILE_SIZE);
+    const tileRow = Math.floor(laser.y / TILE_SIZE);
+
+    // If out of map bounds or into a wall => remove
+    if (
+      tileRow < 0 || tileRow >= ROWS ||
+      tileCol < 0 || tileCol >= COLS ||
+      (maze[tileRow] && maze[tileRow][tileCol] === 1)
+    ) {
+      lasers.splice(i, 1);
+    }
+  }
+}
+
+//************************************************************
+// 4. Draw Maze, Player, Enemy, Lasers
 //************************************************************
 function drawMaze() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -175,6 +224,7 @@ function drawMaze() {
   const offsetX = canvasCenterX - player.x;
   const offsetY = canvasCenterY - player.y;
 
+  // Draw Maze
   for (let row=0; row<ROWS; row++) {
     for (let col=0; col<COLS; col++) {
       const tileX = col * TILE_SIZE;
@@ -190,7 +240,7 @@ function drawMaze() {
     }
   }
 
-  // Player
+  // Draw Player
   const pScreenX = player.x + offsetX;
   const pScreenY = player.y + offsetY;
   ctx.fillStyle = "lime";
@@ -198,28 +248,40 @@ function drawMaze() {
   ctx.arc(pScreenX, pScreenY, 8, 0, Math.PI*2);
   ctx.fill();
 
-  // Enemy
+  // Draw Enemy
   const eScreenX = enemy.x + offsetX;
   const eScreenY = enemy.y + offsetY;
   ctx.fillStyle = "red";
   ctx.beginPath();
   ctx.arc(eScreenX, eScreenY, 8, 0, Math.PI*2);
   ctx.fill();
+
+  // Draw Lasers
+  ctx.fillStyle = "yellow";
+  for (let laser of lasers) {
+    const lx = laser.x + offsetX;
+    const ly = laser.y + offsetY;
+    ctx.beginPath();
+    // A small circle or rectangle – up to you
+    ctx.arc(lx, ly, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
 }
 
 //************************************************************
 // 5. Main Loop
 //************************************************************
 function gameLoop() {
-  updatePlayer();
-  updateEnemy();
+  updatePlayer();   // Keyboard
+  updateEnemy();    
+  updateLasers();   // Move lasers
   drawMaze();
   requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
 
 //************************************************************
-// 6. Controls
+// 6. Controls - Keyboard and On-Screen Buttons
 //************************************************************
 window.addEventListener("keydown", (e) => {
   keys[e.key] = true;
@@ -228,7 +290,6 @@ window.addEventListener("keyup", (e) => {
   keys[e.key] = false;
 });
 
-// On-screen arrow buttons
 ["btnUp","btnDown","btnLeft","btnRight"].forEach(id => {
   const btn = document.getElementById(id);
   btn.addEventListener("mousedown", () => {
@@ -257,6 +318,88 @@ window.addEventListener("keyup", (e) => {
     if (id === "btnLeft") keys.ArrowLeft = false;
     if (id === "btnRight") keys.ArrowRight = false;
   });
+});
+
+//************************************************************
+// 7. Swipe-to-Move + Tap-to-Fire
+//************************************************************
+
+// We'll track where the finger started, and how far it moved
+let touchStartX = 0;
+let touchStartY = 0;
+let totalMove = 0; // track distance traveled to distinguish swipe vs tap
+
+canvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  totalMove = 0;
+});
+
+canvas.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+  // If there's only one touch, treat it as a drag to move the maze
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    totalMove += Math.abs(dx) + Math.abs(dy);
+
+    // Move the player in the opposite direction of the drag
+    // This effectively "swipes" the map
+    const newX = player.x - dx;
+    const newY = player.y - dy;
+
+    // Check collision in a simple way
+    const tileCol = Math.floor(newX / TILE_SIZE);
+    const tileRow = Math.floor(newY / TILE_SIZE);
+    if (maze[tileRow] && maze[tileRow][tileCol] === 0) {
+      player.x = newX;
+      player.y = newY;
+    }
+
+    // Reset touchStart so movement continues seamlessly
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+  }
+});
+
+canvas.addEventListener("touchend", (e) => {
+  e.preventDefault();
+
+  // If totalMove is small => it's a TAP
+  // We'll interpret a quick tap as "fire a laser"
+  if (totalMove < 10) {
+    // Where did the touch end?
+    // For simplicity, we can use changedTouches[0]
+    const touch = e.changedTouches[0];
+    const tapX = touch.clientX;
+    const tapY = touch.clientY;
+
+    // Convert screen coords to world coords
+    const offsetX = canvasCenterX - player.x;
+    const offsetY = canvasCenterY - player.y;
+    const worldX = tapX - offsetX;
+    const worldY = tapY - offsetY;
+
+    // Direction from player to tap
+    const dirX = worldX - player.x;
+    const dirY = worldY - player.y;
+    const length = Math.sqrt(dirX*dirX + dirY*dirY);
+    if (length > 0 && lasers.length < MAX_LASERS) {
+      // Normalize
+      const ndx = dirX / length;
+      const ndy = dirY / length;
+      lasers.push({
+        x: player.x, 
+        y: player.y,
+        dx: ndx, 
+        dy: ndy,
+        speed: 10 // Laser speed
+      });
+    }
+  }
 });
 </script>
 </body>

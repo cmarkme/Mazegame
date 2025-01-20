@@ -260,7 +260,6 @@ function drawMaze() {
     const lx = laser.x + offsetX;
     const ly = laser.y + offsetY;
     ctx.beginPath();
-    // small circle for the laser
     ctx.arc(lx, ly, 4, 0, Math.PI * 2);
     ctx.fill();
   });
@@ -340,9 +339,13 @@ canvas.addEventListener("touchmove", (e) => {
   e.preventDefault();
   if (e.touches.length === 1) {
     const touch = e.touches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-    totalMove += Math.abs(dx) + Math.abs(dy);
+    const rect = canvas.getBoundingClientRect();
+    const currentX = touch.clientX - rect.left;
+    const currentY = touch.clientY - rect.top;
+
+    // Calculate movement relative to start
+    const dx = currentX - touchStartX;
+    const dy = currentY - touchStartY;
 
     // Move player in opposite direction of drag
     const newX = player.x - dx;
@@ -357,35 +360,32 @@ canvas.addEventListener("touchmove", (e) => {
     }
 
     // Reset the start so we can keep swiping
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
+    touchStartX = currentX;
+    touchStartY = currentY;
   }
 });
 
 canvas.addEventListener("touchend", (e) => {
   e.preventDefault();
   if (totalMove < 10) {
-    // => Tap (not swipe)
+    // Tap (not swipe)
     const touch = e.changedTouches[0];
-    const tapX = touch.clientX;
-    const tapY = touch.clientY;
+    const rect = canvas.getBoundingClientRect();
+    const tapX = touch.clientX - rect.left;
+    const tapY = touch.clientY - rect.top;
 
-    // --- FIXED LASER DIRECTION (Option A) ---
-    // Hero is visually at (canvasCenterX, canvasCenterY).
-    // Direction in screen space = (tapX - centerX, tapY - centerY).
-    // We'll still spawn the laser at the player's *world* coords, 
-    // but move it according to that direction.
+    // Fixed laser direction
     const dxScreen = tapX - canvasCenterX;
     const dyScreen = tapY - canvasCenterY;
-    const length = Math.sqrt(dxScreen*dxScreen + dyScreen*dyScreen);
+    const length = Math.sqrt(dxScreen * dxScreen + dyScreen * dyScreen);
 
     if (length > 0 && lasers.length < MAX_LASERS) {
       const ndx = dxScreen / length;
       const ndy = dyScreen / length;
       lasers.push({
-        x: player.x,    // spawn at player's world coords
+        x: player.x,  // spawn at player's world coords
         y: player.y,
-        dx: ndx,        // direction in screen space
+        dx: ndx,
         dy: ndy,
         speed: 10
       });
